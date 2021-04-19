@@ -617,6 +617,9 @@ size_t BleKeyboard::press(uint8_t k)
 			_keyReport.modifiers |= 0x40;
 			k &= 0x3F;
 		}
+		if (k == 0x03) { // special case 0x64
+			k = 0x64;
+		}
 	}
 
 	// Add k to the key report only if it's not already present
@@ -676,6 +679,9 @@ size_t BleKeyboard::release(uint8_t k)
 		if (k & 0x40) {
 			_keyReport.modifiers &= ~(0x40);
 			k &= 0x3F;
+		}
+		if (k == 0x03) { // special case 0x64
+			k = 0x64;
 		}
 	}
 
