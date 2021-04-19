@@ -77,6 +77,7 @@ const MediaKeyReport KEY_MEDIA_WWW_BACK = {0, 32};
 const MediaKeyReport KEY_MEDIA_CONSUMER_CONTROL_CONFIGURATION = {0, 64}; // Media Selection
 const MediaKeyReport KEY_MEDIA_EMAIL_READER = {0, 128};
 
+enum class Keymap {QWERTY, AZERTY};
 
 //  Low level key report: up to 6 keys and shift, ctrl etc at once
 typedef struct
@@ -97,6 +98,8 @@ private:
   KeyReport _keyReport;
   MediaKeyReport _mediaKeyReport;
   static void taskServer(void* pvParameter);
+  const uint8_t *keymap;
+
 public:
   BleKeyboard(std::string deviceName = "ESP32 BLE Keyboard", std::string deviceManufacturer = "Espressif", uint8_t batteryLevel = 100);
   void begin(void);
@@ -116,6 +119,7 @@ public:
   uint8_t batteryLevel;
   std::string deviceManufacturer;
   std::string deviceName;
+  void setKeymap(Keymap keymap);
 protected:
   virtual void onStarted(BLEServer *pServer) { };
 };

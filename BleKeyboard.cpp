@@ -89,94 +89,10 @@ static const uint8_t _hidReportDescriptor[] = {
   END_COLLECTION(0)                  // END_COLLECTION
 };
 
-BleKeyboard::BleKeyboard(std::string deviceName, std::string deviceManufacturer, uint8_t batteryLevel) : hid(0)
-{
-  this->deviceName = deviceName;
-  this->deviceManufacturer = deviceManufacturer;
-  this->batteryLevel = batteryLevel;
-  this->connectionStatus = new BleConnectionStatus();
-}
-
-void BleKeyboard::begin(void)
-{
-  xTaskCreate(this->taskServer, "server", 20000, (void *)this, 5, NULL);
-}
-
-void BleKeyboard::end(void)
-{
-}
-
-bool BleKeyboard::isConnected(void) {
-  return this->connectionStatus->connected;
-}
-
-void BleKeyboard::setBatteryLevel(uint8_t level) {
-  this->batteryLevel = level;
-  if (hid != 0)
-    this->hid->setBatteryLevel(this->batteryLevel);
-}
-
-void BleKeyboard::taskServer(void* pvParameter) {
-  BleKeyboard* bleKeyboardInstance = (BleKeyboard *) pvParameter; //static_cast<BleKeyboard *>(pvParameter);
-  BLEDevice::init(bleKeyboardInstance->deviceName);
-  BLEServer *pServer = BLEDevice::createServer();
-  pServer->setCallbacks(bleKeyboardInstance->connectionStatus);
-
-  bleKeyboardInstance->hid = new BLEHIDDevice(pServer);
-  bleKeyboardInstance->inputKeyboard = bleKeyboardInstance->hid->inputReport(KEYBOARD_ID); // <-- input REPORTID from report map
-  bleKeyboardInstance->outputKeyboard = bleKeyboardInstance->hid->outputReport(KEYBOARD_ID);
-  bleKeyboardInstance->inputMediaKeys = bleKeyboardInstance->hid->inputReport(MEDIA_KEYS_ID);
-  bleKeyboardInstance->connectionStatus->inputKeyboard = bleKeyboardInstance->inputKeyboard;
-  bleKeyboardInstance->connectionStatus->outputKeyboard = bleKeyboardInstance->outputKeyboard;
-	bleKeyboardInstance->connectionStatus->inputMediaKeys = bleKeyboardInstance->inputMediaKeys;
-
-  bleKeyboardInstance->outputKeyboard->setCallbacks(new KeyboardOutputCallbacks());
-
-  bleKeyboardInstance->hid->manufacturer()->setValue(bleKeyboardInstance->deviceManufacturer);
-
-  bleKeyboardInstance->hid->pnp(0x02, 0xe502, 0xa111, 0x0210);
-  bleKeyboardInstance->hid->hidInfo(0x00,0x01);
-
-  BLESecurity *pSecurity = new BLESecurity();
-
-  pSecurity->setAuthenticationMode(ESP_LE_AUTH_BOND);
-
-  bleKeyboardInstance->hid->reportMap((uint8_t*)_hidReportDescriptor, sizeof(_hidReportDescriptor));
-  bleKeyboardInstance->hid->startServices();
-
-  bleKeyboardInstance->onStarted(pServer);
-
-  BLEAdvertising *pAdvertising = pServer->getAdvertising();
-  pAdvertising->setAppearance(HID_KEYBOARD);
-  pAdvertising->addServiceUUID(bleKeyboardInstance->hid->hidService()->getUUID());
-  pAdvertising->setScanResponse(false);
-  pAdvertising->start();
-  bleKeyboardInstance->hid->setBatteryLevel(bleKeyboardInstance->batteryLevel);
-
-  ESP_LOGD(LOG_TAG, "Advertising started!");
-  vTaskDelay(portMAX_DELAY); //delay(portMAX_DELAY);
-}
-
-void BleKeyboard::sendReport(KeyReport* keys)
-{
-  if (this->isConnected())
-  {
-    this->inputKeyboard->setValue((uint8_t*)keys, sizeof(KeyReport));
-    this->inputKeyboard->notify();
-  }
-}
-
-void BleKeyboard::sendReport(MediaKeyReport* keys)
-{
-  if (this->isConnected())
-  {
-    this->inputMediaKeys->setValue((uint8_t*)keys, sizeof(MediaKeyReport));
-    this->inputMediaKeys->notify();
-  }
-}
-
 extern
 const uint8_t _asciimap[128] PROGMEM;
+extern
+const uint8_t _asciimap_azerty[256] PROGMEM;
 
 #define SHIFT 0x80
 const uint8_t _asciimap[128] =
@@ -312,6 +228,366 @@ const uint8_t _asciimap[128] =
 	0				// DEL
 };
 
+/* Credits to https://github.com/matthgyver/Arduino-Keyboard-FR for the azerty keymap */
+#define ALTGR 0x40
+const uint8_t _asciimap_azerty[256] =
+{
+  0x00,             // NUL
+  0x00,             // SOH
+  0x00,             // STX
+  0x00,             // ETX
+  0x00,             // EOT
+  0x00,             // ENQ
+  0x00,             // ACK  
+  0x00,             // BEL
+  0x2a,							// BS	Backspace
+  0x2b,							// TAB	Tab
+  0x28,							// LF	Enter
+  0x00,             // VT 
+  0x00,             // FF 
+  0x00,             // CR 
+  0x00,             // SO 
+  0x00,             // SI 
+  0x00,             // DEL
+  0x00,             // DC1
+  0x00,             // DC2
+  0x00,             // DC3
+  0x00,             // DC4
+  0x00,             // NAK
+  0x00,             // SYN
+  0x00,             // ETB
+  0x00,             // CAN
+  0x00,             // EM 
+  0x00,             // SUB
+  0x00,             // ESC
+  0x00,             // FS 
+  0x00,             // GS 
+  0x00,             // RS 
+  0x00,             // US 
+  0x2c,		   				// ' '
+  0x38,	   					// ! 
+  0x20,    					// "
+  0x20|ALTGR,    	    	// #
+  0x30,    					// $
+  0x34|SHIFT,    		// %
+  0x1E,    					// & 
+  0x21,          		// '
+  0x22,    					// (
+  0x2d,    					// )
+  0x32,    					// *
+  0x2e|SHIFT,       // +
+  0x10,             // , 
+  0x23,             // -
+  0x36|SHIFT,       // .
+  0x37|SHIFT,       // /
+  0x27|SHIFT,       // 0
+  0x1e|SHIFT,       // 1
+  0x1f|SHIFT,       // 2
+  0x20|SHIFT,       // 3
+  0x21|SHIFT,       // 4
+  0x22|SHIFT,       // 5
+  0x23|SHIFT,       // 6
+  0x24|SHIFT,       // 7
+  0x25|SHIFT,       // 8
+  0x26|SHIFT,       // 9
+  0x37,             // :
+  0x36,             // ;
+  0x03,      				// < Done
+  0x2e,          		// =
+  0x03|SHIFT,       // > Done
+  0x10|SHIFT,       // ? 0x38 -> 0x10 OK
+  0x27|ALTGR,       // @
+  0x14|SHIFT,       // A
+  0x05|SHIFT,       // B
+  0x06|SHIFT,       // C
+  0x07|SHIFT,       // D
+  0x08|SHIFT,       // E
+  0x09|SHIFT,       // F
+  0x0a|SHIFT,       // G
+  0x0b|SHIFT,       // H
+  0x0c|SHIFT,       // I
+  0x0d|SHIFT,       // J
+  0x0e|SHIFT,       // K
+  0x0f|SHIFT,       // L
+  0x33|SHIFT,       // M
+  0x11|SHIFT,       // N
+  0x12|SHIFT,       // O
+  0x13|SHIFT,       // P
+  0x04|SHIFT,       // Q
+  0x15|SHIFT,       // R
+  0x16|SHIFT,       // S
+  0x17|SHIFT,       // T
+  0x18|SHIFT,       // U
+  0x19|SHIFT,       // V
+  0x1d|SHIFT,       // W
+  0x1b|SHIFT,       // X
+  0x1c|SHIFT,       // Y
+  0x1a|SHIFT,       // Z
+  0x22|ALTGR,  		// [
+  0x25|ALTGR,          		// backslash
+  0x2d|ALTGR,          		// ]
+  0x26|ALTGR,    		// ^
+  0x25,    					// _
+  0x24|ALTGR,       // `
+  0x14,          		// a
+  0x05,          		// b
+  0x06,          		// c
+  0x07,          		// d
+  0x08,          		// e
+  0x09,          		// f
+  0x0a,          		// g
+  0x0b,          		// h
+  0x0c,          		// i
+  0x0d,          		// j
+  0x0e,          		// k
+  0x0f,          		// l
+  0x33,          		// m
+  0x11,          		// n
+  0x12,          		// o
+  0x13,          		// p
+  0x04,          		// q
+  0x15,          		// r
+  0x16,          		// s
+  0x17,          		// t
+  0x18,          		// u
+  0x19,          		// v
+  0x1d,          		// w
+  0x1b,          		// x
+  0x1c,          		// y
+  0x1a,          		// z
+  0x21|ALTGR,    			 		// {
+  0x23|ALTGR,    			 		// |
+  0x2e|ALTGR,    			 		// }
+  0x1f|ALTGR,    			 		// ~
+  0,						  	// DEL
+  0x08|ALTGR,      	// €
+  0x00,             // NUL
+  0x00,             // SOH
+  0x00,             // STX
+  0x00,             // ETX
+  0x00,             // EOT
+  0x00,             // ENQ
+  0x00,             // ACK  
+  0x00,             // BEL
+  0x2a,							// BS	Backspace
+  0x2b,							// TAB	Tab
+  0x28,							// LF	Enter
+  0x00,             // VT 
+  0x00,             // FF 
+  0x00,             // CR 
+  0x00,             // SO 
+  0x00,             // SI 
+  0x00,             // DEL
+  0x00,             // DC1
+  0x00,             // DC2
+  0x00,             // DC3
+  0x00,             // DC4
+  0x00,             // NAK
+  0x00,             // SYN
+  0x00,             // ETB
+  0x00,             // CAN
+  0x00,             // EM 
+  0x00,             // SUB
+  0x00,             // ESC
+  0x00,             // FS 
+  0x00,             // GS 
+  0x00,             // RS 
+  0x00,             // US 
+  0,                // nobr
+  0,                //
+  0x30|SHIFT,       // £
+  0x30|ALTGR,				// ø
+  0,
+  0,   
+  0x38|SHIFT,       // §
+  0x20,             // "
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0x2d|SHIFT,       // °
+  0,
+  0x35,             // ²
+  0x35|SHIFT,       // ³
+  0,
+  0x31|SHIFT,       // µ
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0x27,             // à
+  0,
+  0,                // â
+  0,
+  0,                // ä
+  0,
+  0,                // æ
+  0x26,             // ç
+  0x24,             // è
+  0x1f,             // é
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0x34,             // ù
+  0,
+  0,
+  0,
+  0,
+  0,
+  0
+};
+
+BleKeyboard::BleKeyboard(std::string deviceName, std::string deviceManufacturer, uint8_t batteryLevel) : hid(0)
+{
+  this->deviceName = deviceName;
+  this->deviceManufacturer = deviceManufacturer;
+  this->batteryLevel = batteryLevel;
+  this->connectionStatus = new BleConnectionStatus();
+  this->keymap = _asciimap;
+}
+
+void BleKeyboard::begin(void)
+{
+  xTaskCreate(this->taskServer, "server", 20000, (void *)this, 5, NULL);
+}
+
+void BleKeyboard::end(void)
+{
+}
+
+bool BleKeyboard::isConnected(void) {
+  return this->connectionStatus->connected;
+}
+
+void BleKeyboard::setBatteryLevel(uint8_t level) {
+  this->batteryLevel = level;
+  if (hid != 0)
+    this->hid->setBatteryLevel(this->batteryLevel);
+}
+
+void BleKeyboard::taskServer(void* pvParameter) {
+  BleKeyboard* bleKeyboardInstance = (BleKeyboard *) pvParameter; //static_cast<BleKeyboard *>(pvParameter);
+  BLEDevice::init(bleKeyboardInstance->deviceName);
+  BLEServer *pServer = BLEDevice::createServer();
+  pServer->setCallbacks(bleKeyboardInstance->connectionStatus);
+
+  bleKeyboardInstance->hid = new BLEHIDDevice(pServer);
+  bleKeyboardInstance->inputKeyboard = bleKeyboardInstance->hid->inputReport(KEYBOARD_ID); // <-- input REPORTID from report map
+  bleKeyboardInstance->outputKeyboard = bleKeyboardInstance->hid->outputReport(KEYBOARD_ID);
+  bleKeyboardInstance->inputMediaKeys = bleKeyboardInstance->hid->inputReport(MEDIA_KEYS_ID);
+  bleKeyboardInstance->connectionStatus->inputKeyboard = bleKeyboardInstance->inputKeyboard;
+  bleKeyboardInstance->connectionStatus->outputKeyboard = bleKeyboardInstance->outputKeyboard;
+	bleKeyboardInstance->connectionStatus->inputMediaKeys = bleKeyboardInstance->inputMediaKeys;
+
+  bleKeyboardInstance->outputKeyboard->setCallbacks(new KeyboardOutputCallbacks());
+
+  bleKeyboardInstance->hid->manufacturer()->setValue(bleKeyboardInstance->deviceManufacturer);
+
+  bleKeyboardInstance->hid->pnp(0x02, 0xe502, 0xa111, 0x0210);
+  bleKeyboardInstance->hid->hidInfo(0x00,0x01);
+
+  BLESecurity *pSecurity = new BLESecurity();
+
+  pSecurity->setAuthenticationMode(ESP_LE_AUTH_BOND);
+
+  bleKeyboardInstance->hid->reportMap((uint8_t*)_hidReportDescriptor, sizeof(_hidReportDescriptor));
+  bleKeyboardInstance->hid->startServices();
+
+  bleKeyboardInstance->onStarted(pServer);
+
+  BLEAdvertising *pAdvertising = pServer->getAdvertising();
+  pAdvertising->setAppearance(HID_KEYBOARD);
+  pAdvertising->addServiceUUID(bleKeyboardInstance->hid->hidService()->getUUID());
+  pAdvertising->setScanResponse(false);
+  pAdvertising->start();
+  bleKeyboardInstance->hid->setBatteryLevel(bleKeyboardInstance->batteryLevel);
+
+  ESP_LOGD(LOG_TAG, "Advertising started!");
+  vTaskDelay(portMAX_DELAY); //delay(portMAX_DELAY);
+}
+
+void BleKeyboard::sendReport(KeyReport* keys)
+{
+  if (this->isConnected())
+  {
+    this->inputKeyboard->setValue((uint8_t*)keys, sizeof(KeyReport));
+    this->inputKeyboard->notify();
+  }
+}
+
+void BleKeyboard::sendReport(MediaKeyReport* keys)
+{
+  if (this->isConnected())
+  {
+    this->inputMediaKeys->setValue((uint8_t*)keys, sizeof(MediaKeyReport));
+    this->inputMediaKeys->notify();
+  }
+}
+
+void BleKeyboard::setKeymap(Keymap keymap)
+{
+	switch(keymap) {
+		case Keymap::QWERTY:
+			this->keymap = _asciimap;
+			break;
+		case Keymap::AZERTY:
+			this->keymap = _asciimap_azerty;
+			break;
+	}
+}
 
 uint8_t USBPutChar(uint8_t c);
 
@@ -328,7 +604,7 @@ size_t BleKeyboard::press(uint8_t k)
 		_keyReport.modifiers |= (1<<(k-128));
 		k = 0;
 	} else {				// it's a printing key
-		k = pgm_read_byte(_asciimap + k);
+		k = pgm_read_byte(keymap + k);
 		if (!k) {
 			setWriteError();
 			return 0;
@@ -385,7 +661,7 @@ size_t BleKeyboard::release(uint8_t k)
 		_keyReport.modifiers &= ~(1<<(k-128));
 		k = 0;
 	} else {				// it's a printing key
-		k = pgm_read_byte(_asciimap + k);
+		k = pgm_read_byte(keymap + k);
 		if (!k) {
 			return 0;
 		}
