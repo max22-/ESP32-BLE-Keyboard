@@ -613,6 +613,10 @@ size_t BleKeyboard::press(uint8_t k)
 			_keyReport.modifiers |= 0x02;	// the left shift modifier
 			k &= 0x7F;
 		}
+		if (k & 0x40) {
+			_keyReport.modifiers |= 0x40;
+			k &= 0x3F;
+		}
 	}
 
 	// Add k to the key report only if it's not already present
@@ -668,6 +672,10 @@ size_t BleKeyboard::release(uint8_t k)
 		if (k & 0x80) {							// it's a capital letter or other character reached with shift
 			_keyReport.modifiers &= ~(0x02);	// the left shift modifier
 			k &= 0x7F;
+		}
+		if (k & 0x40) {
+			_keyReport.modifiers &= ~(0x40);
+			k &= 0x3F;
 		}
 	}
 
